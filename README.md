@@ -69,11 +69,6 @@ Este projeto implementa uma arquitetura de microserviços usando Spring Boot e S
 3. **Order Service**: `cd order-service && mvn spring-boot:run`
 4. **API Gateway**: `cd api-gateway && mvn spring-boot:run`
 
-### Usando o script:
-```bash
-./start-services.sh
-```
-
 ## URLs dos Serviços
 
 - **Eureka Dashboard**: http://localhost:8761
