@@ -4,7 +4,7 @@ import com.hugo.order.dto.OrderCreateDTO;
 import com.hugo.order.dto.OrderResponseDTO;
 import com.hugo.order.service.OrderService;
 import com.hugo.common.enums.OrderStatus;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,10 +14,14 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/orders")
-@RequiredArgsConstructor
 public class OrderController {
     
     private final OrderService orderService;
+    
+    @Autowired
+    public OrderController(OrderService orderService) {
+        this.orderService = orderService;
+    }
     
     @GetMapping
     public ResponseEntity<List<OrderResponseDTO>> getAllOrders() {
@@ -38,6 +42,21 @@ public class OrderController {
             OrderResponseDTO createdOrder = orderService.createOrder(createDTO);
             return ResponseEntity.status(HttpStatus.CREATED).body(createdOrder);
         } catch (Exception e) {
+            System.err.println("Error creating order: " + e.getMessage());
+            return ResponseEntity.badRequest().build();
+        }
+    }
+    
+    @PutMapping("/{id}")
+    public ResponseEntity<OrderResponseDTO> updateOrder(
+            @PathVariable Long id, 
+            @RequestBody OrderCreateDTO updateDTO) {
+        try {
+            Optional<OrderResponseDTO> updatedOrder = orderService.updateOrder(id, updateDTO);
+            return updatedOrder.map(ResponseEntity::ok)
+                              .orElse(ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            System.err.println("Error updating order: " + e.getMessage());
             return ResponseEntity.badRequest().build();
         }
     }
@@ -69,6 +88,18 @@ public class OrderController {
     @GetMapping("/status")
     public ResponseEntity<List<OrderResponseDTO>> getOrdersByStatus(@RequestParam OrderStatus status) {
         List<OrderResponseDTO> orders = orderService.getOrdersByStatus(status);
+        return ResponseEntity.ok(orders);
+    }
+    
+    @GetMapping("/product/{productId}")
+    public ResponseEntity<List<OrderResponseDTO>> getOrdersByProduct(@PathVariable Long productId) {
+        List<OrderResponseDTO> orders = orderService.getOrdersByProduct(productId);
+        return ResponseEntity.ok(orders);
+    }
+    
+    @GetMapping("/search")
+    public ResponseEntity<List<OrderResponseDTO>> searchOrdersByCustomerName(@RequestParam String customerName) {
+        List<OrderResponseDTO> orders = orderService.searchOrdersByCustomerName(customerName);
         return ResponseEntity.ok(orders);
     }
 }

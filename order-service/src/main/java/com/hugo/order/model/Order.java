@@ -2,18 +2,12 @@ package com.hugo.order.model;
 
 import com.hugo.common.enums.OrderStatus;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "orders")
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
 public class Order {
     
     @Id
@@ -21,36 +15,152 @@ public class Order {
     private Long id;
     
     @Column(nullable = false)
+    private Long productId;
+    
+    @Column(nullable = false)
+    private String productName;
+    
+    @Column(nullable = false)
+    private Integer quantity;
+    
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal unitPrice;
+    
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal totalPrice;
+    
+    @Column(nullable = false)
     private String customerName;
     
     @Column(nullable = false)
     private String customerEmail;
-    
-    @ElementCollection
-    @CollectionTable(name = "order_product_ids", joinColumns = @JoinColumn(name = "order_id"))
-    @Column(name = "product_id")
-    private List<Long> productIds;
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private OrderStatus status;
     
     @Column(nullable = false)
-    private LocalDateTime createdAt;
+    private LocalDateTime orderDate;
     
     @Column
-    private LocalDateTime updatedAt;
+    private LocalDateTime lastModified;
     
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        if (status == null) {
-            status = OrderStatus.CREATED;
-        }
+
+    public Order() {
+        this.orderDate = LocalDateTime.now();
+        this.lastModified = LocalDateTime.now();
+        this.status = OrderStatus.CREATED;
+    }
+    
+    public Order(Long productId, String productName, Integer quantity, BigDecimal unitPrice, 
+                String customerName, String customerEmail) {
+        this();
+        this.productId = productId;
+        this.productName = productName;
+        this.quantity = quantity;
+        this.unitPrice = unitPrice;
+        this.totalPrice = unitPrice.multiply(BigDecimal.valueOf(quantity));
+        this.customerName = customerName;
+        this.customerEmail = customerEmail;
     }
     
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        this.lastModified = LocalDateTime.now();
+    }
+    
+    public Long getId() {
+        return id;
+    }
+    
+    public void setId(Long id) {
+        this.id = id;
+    }
+    
+    public Long getProductId() {
+        return productId;
+    }
+    
+    public void setProductId(Long productId) {
+        this.productId = productId;
+    }
+    
+    public String getProductName() {
+        return productName;
+    }
+    
+    public void setProductName(String productName) {
+        this.productName = productName;
+    }
+    
+    public Integer getQuantity() {
+        return quantity;
+    }
+    
+    public void setQuantity(Integer quantity) {
+        this.quantity = quantity;
+        if (this.unitPrice != null) {
+            this.totalPrice = this.unitPrice.multiply(BigDecimal.valueOf(quantity));
+        }
+    }
+    
+    public BigDecimal getUnitPrice() {
+        return unitPrice;
+    }
+    
+    public void setUnitPrice(BigDecimal unitPrice) {
+        this.unitPrice = unitPrice;
+        if (this.quantity != null) {
+            this.totalPrice = unitPrice.multiply(BigDecimal.valueOf(this.quantity));
+        }
+    }
+    
+    public BigDecimal getTotalPrice() {
+        return totalPrice;
+    }
+    
+    public void setTotalPrice(BigDecimal totalPrice) {
+        this.totalPrice = totalPrice;
+    }
+    
+    public String getCustomerName() {
+        return customerName;
+    }
+    
+    public void setCustomerName(String customerName) {
+        this.customerName = customerName;
+    }
+    
+    public String getCustomerEmail() {
+        return customerEmail;
+    }
+    
+    public void setCustomerEmail(String customerEmail) {
+        this.customerEmail = customerEmail;
+    }
+    
+    public OrderStatus getStatus() {
+        return status;
+    }
+    
+    public void setStatus(OrderStatus status) {
+        this.status = status;
+        this.lastModified = LocalDateTime.now();
+    }
+    
+    public LocalDateTime getOrderDate() {
+        return orderDate;
+    }
+    
+    public void setOrderDate(LocalDateTime orderDate) {
+        this.orderDate = orderDate;
+    }
+    
+    public LocalDateTime getLastModified() {
+        return lastModified;
+    }
+    
+    public void setLastModified(LocalDateTime lastModified) {
+        this.lastModified = lastModified;
     }
 }

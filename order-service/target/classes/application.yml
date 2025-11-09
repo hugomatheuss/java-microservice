@@ -17,6 +17,7 @@ spring:
   h2:
     console:
       enabled: true
+      path: /h2-console
 
 eureka:
   client:
@@ -28,6 +29,25 @@ eureka:
     instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
     prefer-ip-address: true
 
+feign:
+  client:
+    config:
+      default:
+        connect-timeout: 5000
+        read-timeout: 5000
+        logger-level: basic
+  hystrix:
+    enabled: true
+
+hystrix:
+  command:
+    default:
+      execution:
+        isolation:
+          thread:
+            timeoutInMilliseconds: 10000
+
 logging:
   level:
     com.hugo.order: DEBUG
+    com.hugo.order.client: DEBUG

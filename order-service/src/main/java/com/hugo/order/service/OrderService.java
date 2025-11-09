@@ -7,8 +7,7 @@ import com.hugo.order.model.Order;
 import com.hugo.order.repository.OrderRepository;
 import com.hugo.common.dto.ProductDTO;
 import com.hugo.common.enums.OrderStatus;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,12 +15,16 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class OrderService {
     
     private final OrderRepository orderRepository;
     private final ProductServiceClient productServiceClient;
+    
+    @Autowired
+    public OrderService(OrderRepository orderRepository, ProductServiceClient productServiceClient) {
+        this.orderRepository = orderRepository;
+        this.productServiceClient = productServiceClient;
+    }
     
     public List<OrderResponseDTO> getAllOrders() {
         return orderRepository.findAll()
@@ -36,27 +39,68 @@ public class OrderService {
     }
     
     public OrderResponseDTO createOrder(OrderCreateDTO createDTO) {
-        for (Long productId : createDTO.getProductIds()) {
-            try {
-                ProductDTO product = productServiceClient.getProductById(productId);
-                if (product == null) {
-                    throw new RuntimeException("Product with ID " + productId + " not found");
-                }
-            } catch (Exception e) {
-                log.error("Error validating product with ID: {}", productId, e);
-                throw new RuntimeException("Error validating product with ID: " + productId);
+        // Validar produto através do Product Service
+        try {
+            ProductDTO product = productServiceClient.getProductById(createDTO.getProductId());
+            if (product == null) {
+                throw new RuntimeException("Product with ID " + createDTO.getProductId() + " not found");
             }
+            
+            // Verificar se há estoque suficiente
+            if (product.getStockQuantity() < createDTO.getQuantity()) {
+                throw new RuntimeException("Insufficient stock. Available: " + product.getStockQuantity() + 
+                                         ", Requested: " + createDTO.getQuantity());
+            }
+            
+            // Criar o pedido
+            Order order = new Order(
+                product.getId(),
+                product.getName(),
+                createDTO.getQuantity(),
+                product.getPrice(),
+                createDTO.getCustomerName(),
+                createDTO.getCustomerEmail()
+            );
+            
+            Order savedOrder = orderRepository.save(order);
+            System.out.println("Order created successfully: " + savedOrder.getId());
+            
+            return convertToResponseDTO(savedOrder);
+            
+        } catch (Exception e) {
+            System.err.println("Error creating order: " + e.getMessage());
+            throw new RuntimeException("Error creating order: " + e.getMessage());
         }
-        
-        Order order = convertToEntity(createDTO);
-        Order savedOrder = orderRepository.save(order);
-        return convertToResponseDTO(savedOrder);
     }
     
     public Optional<OrderResponseDTO> updateOrderStatus(Long id, OrderStatus status) {
         return orderRepository.findById(id)
                 .map(existingOrder -> {
                     existingOrder.setStatus(status);
+                    Order savedOrder = orderRepository.save(existingOrder);
+                    System.out.println("Order " + id + " status updated to: " + status);
+                    return convertToResponseDTO(savedOrder);
+                });
+    }
+    
+    public Optional<OrderResponseDTO> updateOrder(Long id, OrderCreateDTO updateDTO) {
+        return orderRepository.findById(id)
+                .map(existingOrder -> {
+                    // Validar novo produto se alterado
+                    if (!existingOrder.getProductId().equals(updateDTO.getProductId())) {
+                        ProductDTO product = productServiceClient.getProductById(updateDTO.getProductId());
+                        if (product == null) {
+                            throw new RuntimeException("Product with ID " + updateDTO.getProductId() + " not found");
+                        }
+                        existingOrder.setProductId(product.getId());
+                        existingOrder.setProductName(product.getName());
+                        existingOrder.setUnitPrice(product.getPrice());
+                    }
+                    
+                    existingOrder.setQuantity(updateDTO.getQuantity());
+                    existingOrder.setCustomerName(updateDTO.getCustomerName());
+                    existingOrder.setCustomerEmail(updateDTO.getCustomerEmail());
+                    
                     Order savedOrder = orderRepository.save(existingOrder);
                     return convertToResponseDTO(savedOrder);
                 });
@@ -65,6 +109,7 @@ public class OrderService {
     public boolean deleteOrder(Long id) {
         if (orderRepository.existsById(id)) {
             orderRepository.deleteById(id);
+            System.out.println("Order deleted: " + id);
             return true;
         }
         return false;
@@ -84,24 +129,33 @@ public class OrderService {
                 .collect(Collectors.toList());
     }
     
+    public List<OrderResponseDTO> getOrdersByProduct(Long productId) {
+        return orderRepository.findByProductId(productId)
+                .stream()
+                .map(this::convertToResponseDTO)
+                .collect(Collectors.toList());
+    }
+    
+    public List<OrderResponseDTO> searchOrdersByCustomerName(String customerName) {
+        return orderRepository.findByCustomerNameContainingIgnoreCase(customerName)
+                .stream()
+                .map(this::convertToResponseDTO)
+                .collect(Collectors.toList());
+    }
+    
     private OrderResponseDTO convertToResponseDTO(Order order) {
         return new OrderResponseDTO(
                 order.getId(),
+                order.getProductId(),
+                order.getProductName(),
+                order.getQuantity(),
+                order.getUnitPrice(),
+                order.getTotalPrice(),
                 order.getCustomerName(),
                 order.getCustomerEmail(),
-                order.getProductIds(),
                 order.getStatus(),
-                order.getCreatedAt(),
-                order.getUpdatedAt()
+                order.getOrderDate(),
+                order.getLastModified()
         );
-    }
-    
-    private Order convertToEntity(OrderCreateDTO createDTO) {
-        Order order = new Order();
-        order.setCustomerName(createDTO.getCustomerName());
-        order.setCustomerEmail(createDTO.getCustomerEmail());
-        order.setProductIds(createDTO.getProductIds());
-        order.setStatus(OrderStatus.CREATED);
-        return order;
     }
 }

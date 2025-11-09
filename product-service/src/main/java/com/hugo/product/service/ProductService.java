@@ -15,10 +15,12 @@ import java.util.stream.Collectors;
 public class ProductService {
     
     private final ProductRepository productRepository;
+    private final ProductEventPublisher eventPublisher;
     
     @Autowired
-    public ProductService(ProductRepository productRepository) {
+    public ProductService(ProductRepository productRepository, ProductEventPublisher eventPublisher) {
         this.productRepository = productRepository;
+        this.eventPublisher = eventPublisher;
     }
     
     public List<ProductResponseDTO> getAllProducts() {
@@ -36,6 +38,9 @@ public class ProductService {
     public ProductResponseDTO createProduct(ProductCreateDTO createDTO) {
         Product product = convertToEntity(createDTO);
         Product savedProduct = productRepository.save(product);
+        
+        eventPublisher.publishProductCreated(savedProduct);
+        
         return convertToResponseDTO(savedProduct);
     }
     
@@ -47,14 +52,28 @@ public class ProductService {
                     existingProduct.setPrice(updateDTO.getPrice());
                     existingProduct.setStockQuantity(updateDTO.getStockQuantity());
                     Product savedProduct = productRepository.save(existingProduct);
+                    
+                    eventPublisher.publishProductUpdated(savedProduct);
+                    
+                    if (savedProduct.getStockQuantity() < 10) {
+                        eventPublisher.publishStockLow(savedProduct);
+                    }
+                    
                     return convertToResponseDTO(savedProduct);
                 });
     }
     
     public boolean deleteProduct(Long id) {
         if (productRepository.existsById(id)) {
-            productRepository.deleteById(id);
-            return true;
+            Product product = productRepository.findById(id).orElse(null);
+            if (product != null) {
+                String productName = product.getName();
+                productRepository.deleteById(id);
+                
+                eventPublisher.publishProductDeleted(id, productName);
+                
+                return true;
+            }
         }
         return false;
     }
