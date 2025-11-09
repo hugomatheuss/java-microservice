@@ -1,4 +1,4 @@
-package com.hugo.common.dto;
+package com.hugo.payment.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

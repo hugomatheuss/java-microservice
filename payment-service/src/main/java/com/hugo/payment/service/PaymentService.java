@@ -1,7 +1,7 @@
 package com.hugo.payment.service;
 
-import com.hugo.common.dto.PaymentRequestDTO;
-import com.hugo.common.dto.PaymentResponseDTO;
+import com.hugo.payment.dto.PaymentRequestDTO;
+import com.hugo.payment.dto.PaymentResponseDTO;
 import com.hugo.payment.model.Payment;
 import com.hugo.payment.model.PaymentStatus;
 import com.hugo.payment.repository.PaymentRepository;

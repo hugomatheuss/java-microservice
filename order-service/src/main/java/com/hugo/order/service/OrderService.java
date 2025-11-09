@@ -1,7 +1,9 @@
 package com.hugo.order.service;
 
+import com.hugo.order.client.PaymentServiceClient;
 import com.hugo.order.client.ProductServiceClient;
 import com.hugo.order.dto.OrderCreateDTO;
+import com.hugo.order.dto.OrderItemDTO;
 import com.hugo.order.dto.OrderResponseDTO;
 import com.hugo.order.model.Order;
 import com.hugo.order.repository.OrderRepository;
@@ -10,6 +12,8 @@ import com.hugo.common.enums.OrderStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -17,14 +21,17 @@ import java.util.stream.Collectors;
 @Service
 public class OrderService {
     
-    private final OrderRepository orderRepository;
-    private final ProductServiceClient productServiceClient;
-    
     @Autowired
-    public OrderService(OrderRepository orderRepository, ProductServiceClient productServiceClient) {
-        this.orderRepository = orderRepository;
-        this.productServiceClient = productServiceClient;
-    }
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private ProductServiceClient productServiceClient;
+
+    @Autowired
+    private PaymentServiceClient paymentServiceClient;
+
+    @Autowired
+    private OrderEventPublisher eventPublisher;
     
     public List<OrderResponseDTO> getAllOrders() {
         return orderRepository.findAll()
@@ -33,44 +40,51 @@ public class OrderService {
                 .collect(Collectors.toList());
     }
     
-    public Optional<OrderResponseDTO> getOrderById(Long id) {
-        return orderRepository.findById(id)
-                .map(this::convertToResponseDTO);
+    public OrderResponseDTO getOrderById(Long id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+        return convertToResponseDTO(order);
     }
     
     public OrderResponseDTO createOrder(OrderCreateDTO createDTO) {
-        // Validar produto através do Product Service
-        try {
-            ProductDTO product = productServiceClient.getProductById(createDTO.getProductId());
-            if (product == null) {
-                throw new RuntimeException("Product with ID " + createDTO.getProductId() + " not found");
-            }
-            
-            // Verificar se há estoque suficiente
-            if (product.getStockQuantity() < createDTO.getQuantity()) {
-                throw new RuntimeException("Insufficient stock. Available: " + product.getStockQuantity() + 
-                                         ", Requested: " + createDTO.getQuantity());
-            }
-            
-            // Criar o pedido
-            Order order = new Order(
-                product.getId(),
-                product.getName(),
-                createDTO.getQuantity(),
-                product.getPrice(),
-                createDTO.getCustomerName(),
-                createDTO.getCustomerEmail()
-            );
-            
-            Order savedOrder = orderRepository.save(order);
-            System.out.println("Order created successfully: " + savedOrder.getId());
-            
-            return convertToResponseDTO(savedOrder);
-            
-        } catch (Exception e) {
-            System.err.println("Error creating order: " + e.getMessage());
-            throw new RuntimeException("Error creating order: " + e.getMessage());
+        System.out.println("🛒 Creating new order...");
+
+        if (createDTO.getItems() == null || createDTO.getItems().isEmpty()) {
+            throw new RuntimeException("Order must have at least one item");
         }
+        
+        OrderItemDTO firstItem = createDTO.getItems().get(0);
+        
+        ProductDTO product = productServiceClient.getProductById(firstItem.getProductId());
+        if (product == null) {
+            throw new RuntimeException("Product not found: " + firstItem.getProductId());
+        }
+
+        if (product.getStockQuantity() < firstItem.getQuantity()) {
+            throw new RuntimeException("Insufficient stock for product: " + product.getName() + 
+                                     " (Available: " + product.getStockQuantity() + 
+                                     ", Requested: " + firstItem.getQuantity() + ")");
+        }
+
+        Order order = new Order(
+            firstItem.getProductId(),
+            product.getName(),
+            firstItem.getQuantity(),
+            product.getPrice(),
+            createDTO.getCustomerName(),
+            createDTO.getCustomerEmail()
+        );
+        
+        order.setStatus(OrderStatus.PENDING);
+
+        Order savedOrder = orderRepository.save(order);
+        System.out.println("✅ Order created: " + savedOrder.getId() + 
+                          " - Product: " + savedOrder.getProductName() + 
+                          " - Total: R$" + savedOrder.getTotalPrice());
+
+        eventPublisher.publishOrderPayment(savedOrder.getId(), savedOrder.getTotalPrice());
+
+        return convertToResponseDTO(savedOrder);
     }
     
     public Optional<OrderResponseDTO> updateOrderStatus(Long id, OrderStatus status) {
@@ -83,36 +97,53 @@ public class OrderService {
                 });
     }
     
-    public Optional<OrderResponseDTO> updateOrder(Long id, OrderCreateDTO updateDTO) {
-        return orderRepository.findById(id)
-                .map(existingOrder -> {
-                    // Validar novo produto se alterado
-                    if (!existingOrder.getProductId().equals(updateDTO.getProductId())) {
-                        ProductDTO product = productServiceClient.getProductById(updateDTO.getProductId());
-                        if (product == null) {
-                            throw new RuntimeException("Product with ID " + updateDTO.getProductId() + " not found");
-                        }
-                        existingOrder.setProductId(product.getId());
-                        existingOrder.setProductName(product.getName());
-                        existingOrder.setUnitPrice(product.getPrice());
-                    }
-                    
-                    existingOrder.setQuantity(updateDTO.getQuantity());
-                    existingOrder.setCustomerName(updateDTO.getCustomerName());
-                    existingOrder.setCustomerEmail(updateDTO.getCustomerEmail());
-                    
-                    Order savedOrder = orderRepository.save(existingOrder);
-                    return convertToResponseDTO(savedOrder);
-                });
+    public OrderResponseDTO updateOrder(Long id, OrderCreateDTO updateDTO) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new RuntimeException("Cannot update order with status: " + order.getStatus());
+        }
+
+        order.setCustomerName(updateDTO.getCustomerName());
+        
+        Order updatedOrder = orderRepository.save(order);
+        return convertToResponseDTO(updatedOrder);
     }
     
-    public boolean deleteOrder(Long id) {
-        if (orderRepository.existsById(id)) {
-            orderRepository.deleteById(id);
-            System.out.println("Order deleted: " + id);
-            return true;
+    public void deleteOrder(Long id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        if (order.getStatus() == OrderStatus.PAID || order.getStatus() == OrderStatus.SHIPPED) {
+            throw new RuntimeException("Cannot delete order with status: " + order.getStatus());
         }
-        return false;
+
+        orderRepository.delete(order);
+    }
+
+    public void confirmPayment(Long orderId, String paymentCode) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        order.setStatus(OrderStatus.PAID);
+        
+        orderRepository.save(order);
+        System.out.println("💳 Payment confirmed for Order: " + orderId + " - Payment Code: " + paymentCode);
+    }
+
+    public void updateProductStock(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        System.out.println("Updating product stock for Order: " + orderId);
+
+        try {
+            System.out.println("Should update stock for Product: " + order.getProductId() + 
+                             " - Decrease by: " + order.getQuantity());            
+        } catch (Exception e) {
+            System.err.println("Failed to update stock for Product: " + order.getProductId() + " - " + e.getMessage());
+        }
     }
     
     public List<OrderResponseDTO> getOrdersByCustomerEmail(String customerEmail) {
@@ -144,18 +175,19 @@ public class OrderService {
     }
     
     private OrderResponseDTO convertToResponseDTO(Order order) {
-        return new OrderResponseDTO(
-                order.getId(),
-                order.getProductId(),
-                order.getProductName(),
-                order.getQuantity(),
-                order.getUnitPrice(),
-                order.getTotalPrice(),
-                order.getCustomerName(),
-                order.getCustomerEmail(),
-                order.getStatus(),
-                order.getOrderDate(),
-                order.getLastModified()
-        );
+        OrderResponseDTO dto = new OrderResponseDTO();
+        dto.setId(order.getId());
+        dto.setProductId(order.getProductId());
+        dto.setProductName(order.getProductName());
+        dto.setQuantity(order.getQuantity());
+        dto.setUnitPrice(order.getUnitPrice());
+        dto.setTotalPrice(order.getTotalPrice());
+        dto.setCustomerName(order.getCustomerName());
+        dto.setCustomerEmail(order.getCustomerEmail());
+        dto.setStatus(order.getStatus());
+        dto.setOrderDate(order.getOrderDate());
+        dto.setLastModified(order.getLastModified());
+        
+        return dto;
     }
 }

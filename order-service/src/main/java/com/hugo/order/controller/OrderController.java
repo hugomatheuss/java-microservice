@@ -31,10 +31,13 @@ public class OrderController {
     
     @GetMapping("/{id}")
     public ResponseEntity<OrderResponseDTO> getOrderById(@PathVariable Long id) {
-        Optional<OrderResponseDTO> order = orderService.getOrderById(id);
-        return order.map(ResponseEntity::ok)
-                   .orElse(ResponseEntity.notFound().build());
+    try {
+        OrderResponseDTO order = orderService.getOrderById(id);
+        return ResponseEntity.ok(order);
+    } catch (RuntimeException e) {
+        return ResponseEntity.notFound().build();
     }
+}
     
     @PostMapping
     public ResponseEntity<OrderResponseDTO> createOrder(@RequestBody OrderCreateDTO createDTO) {
@@ -52,12 +55,11 @@ public class OrderController {
             @PathVariable Long id, 
             @RequestBody OrderCreateDTO updateDTO) {
         try {
-            Optional<OrderResponseDTO> updatedOrder = orderService.updateOrder(id, updateDTO);
-            return updatedOrder.map(ResponseEntity::ok)
-                              .orElse(ResponseEntity.notFound().build());
-        } catch (Exception e) {
+            OrderResponseDTO updatedOrder = orderService.updateOrder(id, updateDTO);
+            return ResponseEntity.ok(updatedOrder);
+        } catch (RuntimeException e) {
             System.err.println("Error updating order: " + e.getMessage());
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.notFound().build();
         }
     }
     
@@ -72,11 +74,12 @@ public class OrderController {
     
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteOrder(@PathVariable Long id) {
-        boolean deleted = orderService.deleteOrder(id);
-        if (deleted) {
+        try {
+            orderService.deleteOrder(id);
             return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.notFound().build();
     }
     
     @GetMapping("/customer")

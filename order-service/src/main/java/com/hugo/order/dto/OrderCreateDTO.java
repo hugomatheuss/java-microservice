@@ -1,50 +1,26 @@
 package com.hugo.order.dto;
 
+import java.util.List;
+
 public class OrderCreateDTO {
-    
-    private Long productId;
-    private Integer quantity;
     private String customerName;
     private String customerEmail;
+    private List<OrderItemDTO> items;
     
     public OrderCreateDTO() {}
     
-    public OrderCreateDTO(Long productId, Integer quantity, String customerName, String customerEmail) {
-        this.productId = productId;
-        this.quantity = quantity;
+    public OrderCreateDTO(String customerName, String customerEmail, List<OrderItemDTO> items) {
         this.customerName = customerName;
         this.customerEmail = customerEmail;
+        this.items = items;
     }
     
-    public Long getProductId() {
-        return productId;
-    }
-    
-    public void setProductId(Long productId) {
-        this.productId = productId;
-    }
-    
-    public Integer getQuantity() {
-        return quantity;
-    }
-    
-    public void setQuantity(Integer quantity) {
-        this.quantity = quantity;
-    }
-    
-    public String getCustomerName() {
-        return customerName;
-    }
-    
-    public void setCustomerName(String customerName) {
-        this.customerName = customerName;
-    }
-    
-    public String getCustomerEmail() {
-        return customerEmail;
-    }
-    
-    public void setCustomerEmail(String customerEmail) {
-        this.customerEmail = customerEmail;
-    }
+    public String getCustomerName() { return customerName; }
+    public void setCustomerName(String customerName) { this.customerName = customerName; }
+
+    public String getCustomerEmail() { return customerEmail; }
+    public void setCustomerEmail(String customerEmail) { this.customerEmail = customerEmail; }
+
+    public List<OrderItemDTO> getItems() { return items; }
+    public void setItems(List<OrderItemDTO> items) { this.items = items; }
 }

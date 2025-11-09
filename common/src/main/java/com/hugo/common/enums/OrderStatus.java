@@ -1,7 +1,11 @@
 package com.hugo.common.enums;
 
 public enum OrderStatus {
-    CREATED,
+    PENDING,
     CONFIRMED,
-    CANCELLED
+    PAID,
+    SHIPPED,
+    DELIVERED,
+    CANCELLED,
+    CREATED,
 }

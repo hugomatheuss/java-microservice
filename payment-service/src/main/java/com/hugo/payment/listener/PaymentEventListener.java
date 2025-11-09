@@ -2,8 +2,8 @@ package com.hugo.payment.listener;
 
 import com.hugo.common.dto.OrderPaymentEvent;
 import com.hugo.common.dto.PaymentConfirmedEvent;
-import com.hugo.common.dto.PaymentRequestDTO;
-import com.hugo.common.dto.PaymentResponseDTO;
+import com.hugo.payment.dto.PaymentRequestDTO;
+import com.hugo.payment.dto.PaymentResponseDTO;
 import com.hugo.payment.service.PaymentService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
